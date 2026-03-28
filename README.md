@@ -1,6 +1,6 @@
 # autocommit
 
-A minimal terminal UI for staging files and writing conventional commits — without ever leaving your terminal.
+A minimal terminal UI for staging files and writing conventional commits.
 
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-green)
