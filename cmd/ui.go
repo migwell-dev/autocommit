@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -63,23 +64,60 @@ var commitTypes = []struct {
 	{"perf", "performance improvements"},
 }
 
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 type model struct {
-	files         []string        // all files (staged + unstaged) for display
-	fileMap       map[string]bool // true = already git-staged; never mutated except after ctrl+s succeeds
-	cursor        int             // current cursor position in files list
-	diff          string          // diff for files[cursor]
-	screen        string          // current screen: files, diff, type, message, confirm, done
-	commitType    string          // selected commit type
-	typeCursor    int             // cursor for commit type selection
-	commitMessage string          // typed commit message
-	commitError   string          // error message on commit failure
-	diffScroll    int             // vertical scroll in diff screen
-	height        int             // terminal height
-	tempStaging   []string        // unstaged files queued to be staged on ctrl+s
+	files             []string        // all files (staged + unstaged) for display
+	fileMap           map[string]bool // true = already git-staged; never mutated except after ctrl+s succeeds
+	cursor            int             // current cursor position in files list
+	diff              string          // diff for files[cursor]
+	screen            string          // current screen: files, diff, type, message, confirm, done
+	commitType        string          // selected commit type
+	typeCursor        int             // cursor for commit type selection
+	commitMessage     string          // typed commit message
+	commitError       string          // error message on commit failure
+	diffScroll        int             // vertical scroll in diff screen
+	height            int             // terminal height
+	tempStaging       []string        // unstaged files queued to be staged on ctrl+s
+	provider          string          // name of provider (claude, codex, ollama)
+	providerCursor    int             // cursor for provider options
+	ollamaModels      []string
+	ollamaModelCursor int
+	ollamaModel       string
+	spinnerFrame      int
+}
+
+type tickMsg struct{}
+type generateDoneMsg struct {
+	result string
+	err    error
+}
+
+func tick() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
+func generateCmd(provider string, staged []string, fileMap map[string]bool, ollamaModel string, commitType string) tea.Cmd {
+	return func() tea.Msg {
+		result, err := generateCommitMessage(provider, staged, fileMap, ollamaModel, commitType)
+		return generateDoneMsg{result: result, err: err}
+	}
 }
 
 func (m model) isEffectivelyStaged(file string) bool {
 	return m.fileMap[file] || slices.Contains(m.tempStaging, file)
+}
+
+func (m model) stagedFiles() []string {
+	var staged []string
+	for _, f := range m.files {
+		if m.isEffectivelyStaged(f) {
+			staged = append(staged, f)
+		}
+	}
+	return staged
 }
 
 func setInitialModel(files []string, fileMap map[string]bool) model {
@@ -101,44 +139,74 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		return m, nil
+
+	case tickMsg:
+		if m.screen == "loading" {
+			m.spinnerFrame++
+			return m, tick()
+		}
+		return m, nil
+
+	case generateDoneMsg:
+		if msg.err != nil {
+			m.commitError = msg.err.Error()
+			m.screen = "done"
+		} else {
+			m.commitMessage = parseGeneratedMessage(msg.result, m.commitType)
+			m.screen = "message"
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "up":
-			if m.screen != "message" {
-				switch m.screen {
-				case "files":
-					if m.cursor > 0 {
-						m.cursor--
-					}
-				case "type":
-					if m.typeCursor > 0 {
-						m.typeCursor--
-					}
-				case "diff":
-					if m.diffScroll > 0 {
-						m.diffScroll--
-					}
+			switch m.screen {
+			case "files":
+				if m.cursor > 0 {
+					m.cursor--
+				}
+			case "type":
+				if m.typeCursor > 0 {
+					m.typeCursor--
+				}
+			case "provider":
+				if m.providerCursor > 0 {
+					m.providerCursor--
+				}
+			case "ollamamodel":
+				if m.ollamaModelCursor > 0 {
+					m.ollamaModelCursor--
+				}
+			case "diff":
+				if m.diffScroll > 0 {
+					m.diffScroll--
 				}
 			}
 		case "down":
-			if m.screen != "message" {
-				switch m.screen {
-				case "files":
-					if m.cursor < len(m.files)-1 {
-						m.cursor++
-					}
-				case "type":
-					if m.typeCursor < len(commitTypes)-1 {
-						m.typeCursor++
-					}
-				case "diff":
-					lines := strings.Split(strings.TrimSpace(m.diff), "\n")
-					visibleLines := m.height - 8
-					if m.diffScroll < len(lines)-visibleLines {
-						m.diffScroll++
-					}
+			switch m.screen {
+			case "files":
+				if m.cursor < len(m.files)-1 {
+					m.cursor++
+				}
+			case "type":
+				if m.typeCursor < len(commitTypes)-1 {
+					m.typeCursor++
+				}
+			case "provider":
+				if m.providerCursor < len(providers)-1 {
+					m.providerCursor++
+				}
+			case "ollamamodel":
+				if m.ollamaModelCursor < len(m.ollamaModels)-1 {
+					m.ollamaModelCursor++
+				}
+			case "diff":
+				lines := strings.Split(strings.TrimSpace(m.diff), "\n")
+				visibleLines := m.height - 8
+				if m.diffScroll < len(lines)-visibleLines {
+					m.diffScroll++
 				}
 			}
 		case "enter":
@@ -165,7 +233,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = "files"
 			case "type":
 				m.commitType = commitTypes[m.typeCursor].label
-				m.screen = "message"
+				m.screen = "provider"
+			case "provider":
+				m.provider = providers[m.providerCursor]
+				switch m.provider {
+				case "skip":
+					m.screen = "message"
+				case "ollama":
+					models, err := getOllamaModels()
+					if err != nil || len(models) == 0 {
+						m.commitError = "could not list ollama models — is ollama running?"
+						m.screen = "done"
+					} else {
+						m.ollamaModels = models
+						m.ollamaModelCursor = 0
+						m.screen = "ollamamodel"
+					}
+				default:
+					m.screen = "loading"
+					m.spinnerFrame = 0
+					return m, tea.Batch(tick(), generateCmd(m.provider, m.stagedFiles(), m.fileMap, "", m.commitType))
+				}
+			case "ollamamodel":
+				m.ollamaModel = m.ollamaModels[m.ollamaModelCursor]
+				m.screen = "loading"
+				m.spinnerFrame = 0
+				return m, tea.Batch(tick(), generateCmd(m.provider, m.stagedFiles(), m.fileMap, m.ollamaModel, m.commitType))
 			case "message":
 				if m.commitMessage != "" {
 					m.screen = "confirm"
@@ -183,6 +276,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = "files"
 			case "type":
 				m.screen = "diff"
+			case "provider":
+				m.screen = "type"
+			case "ollamamodel":
+				m.screen = "provider"
 			case "message":
 				m.screen = "type"
 			case "confirm":
@@ -249,6 +346,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.typeCursor < len(commitTypes)-1 {
 						m.typeCursor++
 					}
+				case "provider":
+					if m.providerCursor < len(providers)-1 {
+						m.providerCursor++
+					}
+				case "ollamamodel":
+					if m.ollamaModelCursor < len(m.ollamaModels)-1 {
+						m.ollamaModelCursor++
+					}
 				case "diff":
 					lines := strings.Split(strings.TrimSpace(m.diff), "\n")
 					visibleLines := m.height - 8
@@ -265,6 +370,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "type":
 					if m.typeCursor > 0 {
 						m.typeCursor--
+					}
+				case "provider":
+					if m.providerCursor > 0 {
+						m.providerCursor--
+					}
+				case "ollamamodel":
+					if m.ollamaModelCursor > 0 {
+						m.ollamaModelCursor--
 					}
 				case "diff":
 					if m.diffScroll > 0 {
@@ -289,6 +402,12 @@ func (m model) View() string {
 		return viewConfirm(m)
 	case "done":
 		return viewDone(m)
+	case "provider":
+		return viewProvider(m)
+	case "ollamamodel":
+		return viewOllamaModel(m)
+	case "loading":
+		return viewLoading(m)
 	default:
 		return viewFiles(m)
 	}
@@ -450,6 +569,101 @@ func viewCommitType(m model) string {
 			s.WriteString(dimStyle.Render(ct.description))
 		}
 		s.WriteString("\n")
+	}
+
+	return s.String()
+}
+
+func viewProvider(m model) string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("GENERATE MESSAGE"))
+	s.WriteString("\n")
+	s.WriteString(dimStyle.Render("↑↓/jk navigate · enter select · esc go back"))
+	s.WriteString("\n\n")
+
+	descriptions := map[string]string{
+		"ollama": "local · ollama",
+		"claude": "claude CLI · requires auth",
+		"codex":  "openai codex CLI · requires auth",
+		"skip":   "write message manually",
+	}
+
+	for i, p := range providers {
+		if m.providerCursor == i {
+			row := lipgloss.NewStyle().
+				Background(lipgloss.Color("#1f1f1f")).
+				Foreground(green).
+				Bold(true).
+				PaddingLeft(1).
+				PaddingRight(4).
+				Render("▌ " + p)
+			s.WriteString(row)
+			s.WriteString("  ")
+			s.WriteString(dimStyle.Render(descriptions[p]))
+		} else {
+			row := lipgloss.NewStyle().
+				Foreground(white).
+				PaddingLeft(1).
+				Render("  " + p)
+			s.WriteString(row)
+			s.WriteString("  ")
+			s.WriteString(dimStyle.Render(descriptions[p]))
+		}
+		s.WriteString("\n")
+	}
+
+	return s.String()
+}
+
+func viewOllamaModel(m model) string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("SELECT OLLAMA MODEL"))
+	s.WriteString("\n")
+	s.WriteString(dimStyle.Render("↑↓/jk navigate · enter select · esc go back"))
+	s.WriteString("\n\n")
+
+	if len(m.ollamaModels) == 0 {
+		s.WriteString(removedStyle.Render("no models found — run `ollama pull <model>` first"))
+		return s.String()
+	}
+
+	for i, mdl := range m.ollamaModels {
+		if m.ollamaModelCursor == i {
+			row := lipgloss.NewStyle().
+				Background(lipgloss.Color("#1f1f1f")).
+				Foreground(green).
+				Bold(true).
+				PaddingLeft(1).
+				PaddingRight(4).
+				Render("▌ " + mdl)
+			s.WriteString(row)
+		} else {
+			row := lipgloss.NewStyle().
+				Foreground(white).
+				PaddingLeft(1).
+				Render("  " + mdl)
+			s.WriteString(row)
+		}
+		s.WriteString("\n")
+	}
+
+	return s.String()
+}
+
+func viewLoading(m model) string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("GENERATING"))
+	s.WriteString("\n\n")
+
+	frame := spinnerFrames[m.spinnerFrame%len(spinnerFrames)]
+	s.WriteString(selectedFileStyle.Render(frame + " thinking..."))
+	s.WriteString("\n\n")
+	s.WriteString(dimStyle.Render("using " + m.provider))
+	if m.provider == "ollama" {
+		s.WriteString(dimStyle.Render(" · " + m.ollamaModel))
 	}
 
 	return s.String()
