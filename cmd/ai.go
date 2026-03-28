@@ -26,12 +26,19 @@ Diff:
 func parseGeneratedMessage(raw, commitType string) string {
 	raw = strings.TrimSpace(raw)
 	prefix := commitType + ": "
+
 	if strings.HasPrefix(strings.ToLower(raw), strings.ToLower(prefix)) {
-		return strings.TrimSpace(raw[len(prefix):])
+		raw = strings.TrimSpace(raw[len(prefix):])
+	} else if idx := strings.Index(raw, ": "); idx != -1 && idx < 20 {
+		raw = strings.TrimSpace(raw[idx+2:])
 	}
-	if idx := strings.Index(raw, ": "); idx != -1 && idx < 20 {
-		return strings.TrimSpace(raw[idx+2:])
+
+	if len(raw) >= 2 {
+		if (raw[0] == '"' && raw[len(raw)-1] == '"') || (raw[0] == '\'' && raw[len(raw)-1] == '\'') {
+			raw = raw[1 : len(raw)-1]
+		}
 	}
+
 	return raw
 }
 
