@@ -105,36 +105,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
-		case "up", "k":
-			switch m.screen {
-			case "files":
-				if m.cursor > 0 {
-					m.cursor--
-				}
-			case "type":
-				if m.typeCursor > 0 {
-					m.typeCursor--
-				}
-			case "diff":
-				if m.diffScroll > 0 {
-					m.diffScroll--
+		case "up":
+			if m.screen != "message" {
+				switch m.screen {
+				case "files":
+					if m.cursor > 0 {
+						m.cursor--
+					}
+				case "type":
+					if m.typeCursor > 0 {
+						m.typeCursor--
+					}
+				case "diff":
+					if m.diffScroll > 0 {
+						m.diffScroll--
+					}
 				}
 			}
-		case "down", "j":
-			switch m.screen {
-			case "files":
-				if m.cursor < len(m.files)-1 {
-					m.cursor++
-				}
-			case "type":
-				if m.typeCursor < len(commitTypes)-1 {
-					m.typeCursor++
-				}
-			case "diff":
-				lines := strings.Split(strings.TrimSpace(m.diff), "\n")
-				visibleLines := m.height - 8
-				if m.diffScroll < len(lines)-visibleLines {
-					m.diffScroll++
+		case "down":
+			if m.screen != "message" {
+				switch m.screen {
+				case "files":
+					if m.cursor < len(m.files)-1 {
+						m.cursor++
+					}
+				case "type":
+					if m.typeCursor < len(commitTypes)-1 {
+						m.typeCursor++
+					}
+				case "diff":
+					lines := strings.Split(strings.TrimSpace(m.diff), "\n")
+					visibleLines := m.height - 8
+					if m.diffScroll < len(lines)-visibleLines {
+						m.diffScroll++
+					}
 				}
 			}
 		case "enter":
@@ -226,7 +230,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if hasStaged {
 					m.screen = "type"
 				}
-			} else if msg.String() == "b" && m.screen != "message" {
+			} else if msg.String() == "b" {
 				switch m.screen {
 				case "diff":
 					m.screen = "files"
@@ -235,8 +239,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "confirm":
 					m.screen = "message"
 				}
+			} else if msg.String() == "j" {
+				switch m.screen {
+				case "files":
+					if m.cursor < len(m.files)-1 {
+						m.cursor++
+					}
+				case "type":
+					if m.typeCursor < len(commitTypes)-1 {
+						m.typeCursor++
+					}
+				case "diff":
+					lines := strings.Split(strings.TrimSpace(m.diff), "\n")
+					visibleLines := m.height - 8
+					if m.diffScroll < len(lines)-visibleLines {
+						m.diffScroll++
+					}
+				}
+			} else if msg.String() == "k" {
+				switch m.screen {
+				case "files":
+					if m.cursor > 0 {
+						m.cursor--
+					}
+				case "type":
+					if m.typeCursor > 0 {
+						m.typeCursor--
+					}
+				case "diff":
+					if m.diffScroll > 0 {
+						m.diffScroll--
+					}
+				}
 			}
-
 		}
 	}
 	return m, nil

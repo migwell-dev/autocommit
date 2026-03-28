@@ -27,23 +27,24 @@ func getUnstagedFiles() ([]string, error) {
 		return nil, err
 	}
 
-	var cmd *exec.Cmd
+	var files []string
 
 	if hasCommit {
-		cmd = exec.Command("git", "diff", "--name-only")
-	} else {
-		cmd = exec.Command("git", "ls-files", "--others", "--modified", "--exclude-standard")
+		out, err := exec.Command("git", "diff", "--name-only").Output()
+		if err != nil {
+			return nil, err
+		}
+		if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+			files = append(files, strings.Split(trimmed, "\n")...)
+		}
 	}
 
-	out, err := cmd.Output()
+	out, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").Output()
 	if err != nil {
 		return nil, err
 	}
-
-	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-
-	if len(files) == 1 && files[0] == "" {
-		return []string{}, nil
+	if trimmed := strings.TrimSpace(string(out)); trimmed != "" {
+		files = append(files, strings.Split(trimmed, "\n")...)
 	}
 
 	return files, nil
