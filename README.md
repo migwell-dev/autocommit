@@ -7,7 +7,7 @@ A minimal terminal UI for staging files and writing conventional commits.
 
 ## What it does
 
-`autocommit` gives you an interactive TUI for reviewing diffs, staging files, and writing properly formatted [conventional commits](https://www.conventionalcommits.org/). No more `git add -p` gymnastics or forgetting what type of commit you're making.
+`autocommit` gives you an interactive TUI for reviewing diffs, staging files, and writing properly formatted [conventional commits](https://www.conventionalcommits.org/). No more `git add -p` gymnastics or forgetting what type of commit you're making. `autocommit` also support multiple LLM providers to aid in generating commit messages (as of now: Claude, Codex, Ollama)
 
 ```
 AUTOCOMMIT
@@ -79,6 +79,15 @@ autocommit
 | `↓` / `j` | Scroll down |
 | `enter` | Toggle file in staging queue |
 | `esc` / `b` | Back to file list |
+
+### Provider view
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Scroll up |
+| `↓` / `j` | Scroll down |
+| `enter` | Select Provider |
+| `esc` / `b` | Back to commit type list |
 
 ### Commit flow
 
