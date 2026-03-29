@@ -7,7 +7,7 @@ A minimal terminal UI for staging files and writing conventional commits.
 
 ## What it does
 
-`autocommit` gives you an interactive TUI for reviewing diffs, staging files, and writing properly formatted [conventional commits](https://www.conventionalcommits.org/). No more `git add -p` gymnastics or forgetting what type of commit you're making. `autocommit` also support multiple LLM providers to aid in generating commit messages (as of now: Claude, Codex, Ollama)
+`autocommit` gives you an interactive TUI for reviewing diffs, staging files, and writing properly formatted [conventional commits](https://www.conventionalcommits.org/). No more `git add -p` gymnastics or forgetting what type of commit you're making. `autocommit` also supports multiple LLM providers to aid in generating commit messages (currently: Claude, Codex, Ollama). If you don’t have a provider, you can use the copy option to save the commit prompt to your clipboard and feed it to any LLM manually.
 
 ```
 AUTOCOMMIT
@@ -24,8 +24,10 @@ v1.0.0
 
 - Browse all changed files (staged and unstaged) in one view
 - Preview diffs with syntax highlighting before staging
-- Queue files for staging and flush them all at once with `ctrl+s`
-- Guided conventional commit flow: type → message → confirm
+- Queue files for staging and flush them all at once with ctrl+s
+- Guided conventional commit flow: type → provider → message → confirm
+- Generate commit messages using integrated LLMs or save prompt to clipboard
+- Paste clipboard commit messages directly into the commit input (ctrl+v)
 - Keyboard-driven, no mouse required
 
 ## Install
@@ -95,6 +97,7 @@ autocommit
 |-----|--------|
 | `↑` / `↓` | Select commit type |
 | `enter` | Confirm / continue |
+| `ctrl+v` | Paste clipboard commit message (if using Copy) |
 | `esc` | Go back |
 
 ## Commit types
@@ -114,3 +117,7 @@ autocommit
 
 - Go 1.21+
 - Git
+
+## PS
+
+This is a project I developed for speeding up one of the most tedious parts of my workflow (thinking of commit messages). I'm not looking to remake a Git UI from scratch, I just want to not think about commit messages when I code. Think of this as a solution to the never-ending cycle of "changes" "fix" "asdasf" ... etc commit messages.
