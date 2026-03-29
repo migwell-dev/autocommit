@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/atotto/clipboard"
 	"net/http"
 	"os/exec"
 	"strings"
 )
 
-var providers = []string{"ollama", "claude", "codex", "skip"}
+var providers = []string{"ollama", "claude", "codex", "copy", "skip"}
 
 func buildPrompt(diff, commitType string) string {
 	return fmt.Sprintf(`You are a git commit message generator. Given the following diff and commit type, write a commit message description only — do NOT include the type prefix, just the description after the colon.
@@ -21,6 +22,14 @@ Carefully inspect the diff and generate the main idea of the changes that were p
 
 Diff:
 %s`, commitType, diff)
+}
+
+func savePromptToClipboard(prompt string) (string, error) {
+	err := clipboard.WriteAll(prompt)
+	if err != nil {
+		return "failed to save prompt to clipboard", err
+	}
+	return "", nil
 }
 
 func parseGeneratedMessage(raw, commitType string) string {
@@ -113,6 +122,8 @@ func generateCommitMessage(provider string, stagedFiles []string, fileMap map[st
 		return generateWithClaude(prompt)
 	case "codex":
 		return generateWithCodex(prompt)
+	case "copy":
+		return savePromptToClipboard(prompt)
 	default:
 		return "", nil
 	}

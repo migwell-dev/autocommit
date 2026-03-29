@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -85,6 +86,7 @@ type model struct {
 	ollamaModelCursor int
 	ollamaModel       string
 	spinnerFrame      int
+	isCopy            bool
 }
 
 type tickMsg struct{}
@@ -249,6 +251,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.ollamaModelCursor = 0
 						m.screen = "ollamamodel"
 					}
+				case "copy":
+					m.screen = "loading"
+					m.spinnerFrame = 0
+					m.isCopy = true
+					return m, tea.Batch(tick(), generateCmd("copy", m.stagedFiles(), m.fileMap, "", m.commitType))
 				default:
 					m.screen = "loading"
 					m.spinnerFrame = 0
@@ -311,6 +318,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.tempStaging = []string{}
 				}
+			}
+		case "ctrl+v":
+			if m.screen == "message" {
+				text, err := clipboard.ReadAll()
+				if err != nil {
+					fmt.Printf("Could not paste from clipboard: %s", err)
+				} else {
+					m.commitMessage = text
+				}
+				return m, nil
 			}
 		default:
 			if m.screen == "message" {
@@ -407,6 +424,8 @@ func (m model) View() string {
 	case "ollamamodel":
 		return viewOllamaModel(m)
 	case "loading":
+		return viewLoading(m)
+	case "save":
 		return viewLoading(m)
 	default:
 		return viewFiles(m)
@@ -586,6 +605,7 @@ func viewProvider(m model) string {
 		"ollama": "local · ollama",
 		"claude": "claude CLI · requires auth",
 		"codex":  "openai codex CLI · requires auth",
+		"copy":   "save diff prompt to clipboard if you don't have a provider",
 		"skip":   "write message manually",
 	}
 
@@ -671,6 +691,34 @@ func viewLoading(m model) string {
 
 func viewMessage(m model) string {
 	var s strings.Builder
+
+	if m.isCopy {
+		s.WriteString(titleStyle.Render("PROMPT GENERATED"))
+		s.WriteString("\n")
+		s.WriteString(dimStyle.Render("ctrl+v to paste commit message · enter to continue · esc/b go back"))
+		s.WriteString("\n\n")
+
+		s.WriteString(selectedFileStyle.Render("your commit prompt has been saved to clipboard"))
+		s.WriteString("\n")
+		s.WriteString(dimStyle.Render("feed it to your llm of choice then paste the result back here"))
+
+		s.WriteString("\n\n")
+
+		s.WriteString(dimStyle.Render("type: "))
+		s.WriteString(selectedFileStyle.Render(m.commitType))
+		s.WriteString("\n\n")
+
+		s.WriteString(fileStyle.Render("Description: "))
+		s.WriteString(selectedFileStyle.Render(m.commitMessage))
+		s.WriteString(cursorStyle.Render("▌"))
+		s.WriteString("\n\n")
+
+		if m.commitMessage == "" {
+			s.WriteString(dimStyle.Render("(cannot be empty)"))
+		}
+
+		return s.String()
+	}
 
 	s.WriteString(titleStyle.Render("COMMIT MESSAGE"))
 	s.WriteString("\n")
